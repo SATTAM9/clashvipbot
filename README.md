@@ -81,10 +81,12 @@ Finally start the application using
 node index
 ```
 
-# Authors
+# Authors Original Code - Azer & Haw
 
 - [@Azer](https://www.github.com/JamesIsAzer)
 - [@Hawk Eye](https://github.com/hawkeye7662)
+- Development 
+- - [@SATTAM9](https://github.com/SATTAM9/)
 
 # License
 
