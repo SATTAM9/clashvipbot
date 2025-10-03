@@ -1,0 +1,11 @@
+{
+    "ownerGuildID": "your_main_discord_server_id",
+    "clientID": "your_discord_bot_client_id",
+    "logChannels": {
+        "newVerify": "channel_id_for_new_verifications",
+        "crossVerify": "channel_id_for_cross_verifications"
+    },
+    "leaderboardContestID": "channel_id_for_leaderboard_contests",
+    "mediumPermRolesID": ["role_id_1", "role_id_2"],
+    "fullPermRolesID": ["admin_role_id_1", "admin_role_id_2", "admin_role_id_3"]
+}

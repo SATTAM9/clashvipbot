@@ -1,5 +1,11 @@
 # Environment variables (IMPORTANT - Never commit)
 .env
+.env.local
+.env.production
+
+# Bot configuration files (IMPORTANT - Never commit sensitive data)
+config.json
+emojis.json
 
 # Node.js dependencies
 node_modules/
