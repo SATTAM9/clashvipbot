@@ -12,7 +12,7 @@ const getTroopShowcaseEmbed = async (profile, verified, endTimestamp, fileName) 
     ];
 
     const embed = new EmbedBuilder()
-        .setTitle(`${getLeagueEmote(profile.trophies)} ${profile.name} • Army showcase`)
+        .setTitle(`${getLeagueEmote(profile.trophies)} ${profile.name} - Army showcase`)
         .setURL(`https://www.clashofstats.com/players/${getURLName(profile)}-${getURLTag(profile)}/summary`)
         .setColor('#33E3FF')
         .setDescription(descriptionLines.join('\n'))
@@ -120,9 +120,74 @@ const getClanEmbed = (clan) => {
         });
         
         if (clan.description !== "") embed.setDescription(clan.description)
-        if(clan.labels.length > 0) embed.setFooter({text: `${clan.labels[0].name}`, iconURL: `${clan.labels[0].iconUrls.small}` });
+
+        const donationSummary = summarizeClanDonations(clan);
+        if (donationSummary) {
+            const donationLines = [
+                `Donated: ${prettyNumbers(donationSummary.donated)}`,
+                `Received: ${prettyNumbers(donationSummary.received)}`,
+                `Total: ${prettyNumbers(donationSummary.total)}`,
+                `Daily (season avg): ${prettyNumbers(donationSummary.daily)}`
+            ];
+
+            if (donationSummary.topDonor) {
+                donationLines.push(`Top donor: ${donationSummary.topDonor.name} (${prettyNumbers(donationSummary.topDonor.donations)})`);
+            }
+
+            embed.addFields({
+                name: 'Donations',
+                value: donationLines.join('\n'),
+                inline: false
+            });
+        }
+
+        if (Array.isArray(clan.labels) && clan.labels.length > 0) embed.setFooter({text: `${clan.labels[0].name}`, iconURL: `${clan.labels[0].iconUrls.small}` });
         return embed
 }
+
+
+const summarizeClanDonations = (clan) => {
+    const members = Array.isArray(clan.memberList) ? clan.memberList : [];
+    if (!members.length) return null;
+
+    let donated = 0;
+    let received = 0;
+    let topDonor = null;
+
+    for (const member of members) {
+        const donatedValue = Number(member?.donations ?? 0);
+        const receivedValue = Number(member?.received ?? 0);
+
+        donated += donatedValue;
+        received += receivedValue;
+
+        if (!topDonor || donatedValue > topDonor.donations) {
+            topDonor = {
+                name: member?.name ?? 'Unknown',
+                donations: donatedValue,
+            };
+        }
+    }
+
+    const total = donated + received;
+    const seasonDayCount = getSeasonDayCount();
+    const daily = seasonDayCount > 0 ? Math.round(total / seasonDayCount) : total;
+
+    return {
+        donated,
+        received,
+        total,
+        daily,
+        topDonor,
+    };
+};
+
+const getSeasonDayCount = () => {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+    const diff = now.getTime() - start.getTime();
+    return Math.max(1, Math.floor(diff / (24 * 60 * 60 * 1000)) + 1);
+};
 
 const getLeagueEmote = (trophycount) => {
     if (trophycount >= 5000) return emojis.legend

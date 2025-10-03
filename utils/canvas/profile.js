@@ -3,17 +3,75 @@ const { getImagePath, getFontPath, clashFont, tagFont, mapClanRoles, getTrophyLe
 
 registerFont(getFontPath('Clash_Regular'), { family: 'ClashFont' });
 
+
+
+const PLAYER_STATS_SECTION_HEIGHT = 220;
+
+const defaultCardShadow = {
+    color: 'rgba(34, 25, 58, 0.35)',
+    blur: 65,
+    offsetX: 0,
+    offsetY: 32
+};
+
+const withCardShadow = (ctx, drawCallback, customShadow = {}) => {
+    const shadow = { ...defaultCardShadow, ...customShadow };
+    ctx.save();
+    ctx.shadowColor = shadow.color;
+    ctx.shadowBlur = shadow.blur;
+    ctx.shadowOffsetX = shadow.offsetX;
+    ctx.shadowOffsetY = shadow.offsetY;
+    drawCallback();
+    ctx.restore();
+};
+
+const drawCardOutline = (ctx, x, y, width, height, radius, strokeStyle = 'rgba(255, 255, 255, 0.4)', lineWidth = 8) => {
+    ctx.save();
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = strokeStyle;
+    drawRoundedRectPath(ctx, x, y, width, height, radius);
+    ctx.stroke();
+    ctx.restore();
+};
+
+const addCardHighlight = (ctx, x, y, width, height, radius, opacity = 0.35) => {
+    ctx.save();
+    const highlightHeight = Math.max(height * 0.45, 160);
+    drawRoundedRectPath(ctx, x, y, width, height, radius);
+    ctx.clip();
+    const gradient = ctx.createLinearGradient(x, y, x, y + highlightHeight);
+    gradient.addColorStop(0, `rgba(255, 255, 255, ${opacity})`);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, width, highlightHeight);
+    ctx.restore();
+};
+
 const getProfileImage = async (profile, key) => {
     const hasLegendStats = !!(profile?.legendStatistics?.bestSeason)
     
     const width = 3500;
-    const height = hasLegendStats ? 2550 : 2125;
+    const height = hasLegendStats ? 2650 : 2250;
     const canvas = createCanvas(width, height);
     const ctx = setupCanvasContext(canvas.getContext('2d'))
 
-    ctx.fillStyle = '#e8e8e0';
-    
+    const backgroundGradient = createOptimizedGradient(ctx, 'profile-background', 0, 0, width, height, [
+        { offset: 0, color: '#f3f5ff' },
+        { offset: 0.5, color: '#e4e7fb' },
+        { offset: 1, color: '#d9deee' }
+    ]);
+    ctx.fillStyle = backgroundGradient;
     ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+    const backdropAccent = createOptimizedGradient(ctx, 'profile-background-accent', 0, 0, width, height, [
+        { offset: 0, color: 'rgba(236, 229, 255, 0.85)' },
+        { offset: 1, color: 'rgba(236, 229, 255, 0)' }
+    ]);
+    ctx.fillStyle = backdropAccent;
+    ctx.fillRect(0, 0, width, height * 0.45);
+    ctx.restore();
 
     const requiredImages = [
         getTownhallPath(profile.townHallLevel),
@@ -34,12 +92,17 @@ const getProfileImage = async (profile, key) => {
         });
     }
 
-    await nameCardSection(profile, ctx, 25, 25),
-    await achievementsSection(profile.achievements, ctx, 75, hasLegendStats ? 1425 : 1000)
+    await nameCardSection(profile, ctx, 25, 25);
 
     if (hasLegendStats) {
-        await legendLeagueSection(profile.legendStatistics, ctx, 25, 1000)
+        await legendLeagueSection(profile.legendStatistics, ctx, 25, 1000);
     }
+
+    const statsSectionY = hasLegendStats ? 1425 : 1000;
+    playerStatsSection(profile, ctx, 25, statsSectionY);
+
+    const achievementsY = statsSectionY + PLAYER_STATS_SECTION_HEIGHT + 40;
+    await achievementsSection(profile.achievements, ctx, 75, achievementsY);
 
     autoThrottleCacheClear();
 
@@ -57,23 +120,22 @@ const nameCardSection = async (profile, ctx, x, y) => {
     const paddingLeft = 75
 
     const gradient = createOptimizedGradient(ctx, 'namecard', x, y, width, height, [
-        { offset: 0, color: '#8c96af' },
-        { offset: 1, color: '#6b7899' }
+        { offset: 0, color: '#8896c2' },
+        { offset: 0.65, color: '#7483ad' },
+        { offset: 1, color: '#5f6f93' }
     ]);
 
-    ctx.fillStyle = gradient
-
+withCardShadow(ctx, () => {
+    ctx.fillStyle = gradient;
     drawRoundedRectPath(ctx, x, y, width, height, radius); 
+ctx.fill();
+    });
 
-    ctx.fill()
+    addCardHighlight(ctx, x, y, width, height, radius, 0.45);
+    drawCardOutline(ctx, x, y, width, height, radius, 'rgba(106, 119, 152, 0.85)', 8);
 
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = '#6a7798';
-    drawRoundedRectPath(ctx, x, y, width, height, radius); 
-    ctx.stroke();
-
-    dividerLine(ctx, x + paddingLeft + 1400, x + paddingLeft + 1400, y + paddingTop, y + paddingTop + 700)
-    dividerLine(ctx, x + paddingLeft + 2300, x + paddingLeft + 2300, y + paddingTop, y + paddingTop + 700)
+    dividerLine(ctx, x + paddingLeft + 1400, x + paddingLeft + 1400, y + paddingTop, y + paddingTop + 700, '#454f6e', '#c5cbe4')
+    dividerLine(ctx, x + paddingLeft + 2300, x + paddingLeft + 2300, y + paddingTop, y + paddingTop + 700, '#454f6e', '#c5cbe4')
 
     await nameSection(profile, ctx, x + paddingLeft, y + paddingTop + 50),
     await clanSection(profile, ctx, x + paddingLeft + 1600, y + paddingTop + 100),
@@ -81,6 +143,79 @@ const nameCardSection = async (profile, ctx, x, y) => {
 
     addSeasonalSection(profile, ctx, x, y, width, height, radius)
 }
+
+const playerStatsSection = (profile, ctx, x, y) => {
+    const width = 3450;
+    const height = PLAYER_STATS_SECTION_HEIGHT;
+    const radius = 20;
+    const padding = 120;
+
+    const cardGradient = createOptimizedGradient(ctx, 'player-stats-card', x, y, width, height, [
+        { offset: 0, color: '#6d78ad' },
+        { offset: 1, color: '#4f5b88' },
+    ]);
+
+    withCardShadow(ctx, () => {
+        ctx.fillStyle = cardGradient;
+        drawRoundedRectPath(ctx, x, y, width, height, radius);
+        ctx.fill();
+    });
+
+    addCardHighlight(ctx, x, y, width, height, radius, 0.4);
+    drawCardOutline(ctx, x, y, width, height, radius, 'rgba(255, 255, 255, 0.35)', 6);
+
+    clashFont(ctx, 'Combat & Support', x + padding, y + 80, '70', false);
+    tagFont(ctx, 'Season totals at a glance', x + padding, y + 140, '40', false);
+
+    const stats = [
+        { label: 'Troops donated', value: Number(profile?.donations ?? 0), colors: ['#6fb3ff', '#4f8de0'] },
+        { label: 'Troops received', value: Number(profile?.donationsReceived ?? 0), colors: ['#6ee7d6', '#47c0ac'] },
+        { label: 'Attacks won', value: Number(profile?.attackWins ?? 0), colors: ['#f5a970', '#de7f3f'] },
+        { label: 'Defenses won', value: Number(profile?.defenseWins ?? 0), colors: ['#f27289', '#d44b65'] },
+    ];
+
+    const availableWidth = width - padding * 2;
+    const spacing = 60;
+    const boxWidth = (availableWidth - spacing * (stats.length - 1)) / stats.length;
+    const boxHeight = 120;
+    const boxesTop = y + 210;
+
+    stats.forEach((stat, index) => {
+        const boxX = x + padding + index * (boxWidth + spacing);
+        const gradientKey = `player-stats-box-${index}`;
+        const highlightKey = `player-stats-highlight-${index}`;
+
+        const boxGradient = createOptimizedGradient(ctx, gradientKey, boxX, boxesTop, boxWidth, boxHeight, [
+            { offset: 0, color: stat.colors[0] },
+            { offset: 1, color: stat.colors[1] },
+        ]);
+
+        drawRoundedRectPath(ctx, boxX, boxesTop, boxWidth, boxHeight, 28);
+        ctx.fillStyle = boxGradient;
+        ctx.fill();
+
+        ctx.save();
+        drawRoundedRectPath(ctx, boxX, boxesTop, boxWidth, boxHeight, 28);
+        ctx.clip();
+
+        const highlight = createOptimizedGradient(ctx, highlightKey, boxX, boxesTop, boxWidth, boxHeight, [
+            { offset: 0, color: 'rgba(255, 255, 255, 0.35)' },
+            { offset: 1, color: 'rgba(255, 255, 255, 0)' },
+        ]);
+        ctx.fillStyle = highlight;
+        ctx.fillRect(boxX + 6, boxesTop + 6, boxWidth - 12, boxHeight / 2);
+        ctx.restore();
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        drawRoundedRectPath(ctx, boxX, boxesTop, boxWidth, boxHeight, 28);
+        ctx.stroke();
+
+        const displayValue = Math.max(0, Math.round(Number(stat.value ?? 0)));
+        clashFont(ctx, formatNumberWithSpaces(displayValue), boxX + boxWidth / 2, boxesTop + (boxHeight / 2) - 18, '58', true);
+        tagFont(ctx, stat.label, boxX + boxWidth / 2, boxesTop + boxHeight - 28, '36', true);
+    });
+};
 
 const addSeasonalSection = (profile, ctx, x, y, width, height, radius) => {
     const purpleHeight = 125;
@@ -125,19 +260,47 @@ const addSeasonalSection = (profile, ctx, x, y, width, height, radius) => {
 }
 
 const seasonalStatBox = (ctx, x, y, message) => {
-    const width = 250
-    const height = 90
-    ctx.fillStyle = '#2e2c62';
-    drawRoundedRectPath(ctx, x, y, width, height, 30)
+    const width = 250;
+    const height = 90;
+    const radius = 30;
+
+    const gradient = createOptimizedGradient(ctx, 'seasonal-stat-box', x, y, width, height, [
+        { offset: 0, color: '#5b5aa4' },
+        { offset: 1, color: '#403f73' }
+    ]);
+
+    ctx.save();
+    ctx.fillStyle = gradient;
+    drawRoundedRectPath(ctx, x, y, width, height, radius);
     ctx.fill();
-    clashFont(ctx, message, x + (width / 2), y + (height / 2), '50', true)
+    ctx.restore();
+
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    drawRoundedRectPath(ctx, x, y, width, height, radius);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    drawRoundedRectPath(ctx, x, y, width, height, radius);
+    ctx.clip();
+    const overlay = createOptimizedGradient(ctx, 'seasonal-stat-box-highlight', x, y, width, height, [
+        { offset: 0, color: 'rgba(255, 255, 255, 0.35)' },
+        { offset: 1, color: 'rgba(255, 255, 255, 0)' }
+    ]);
+    ctx.fillStyle = overlay;
+    ctx.fillRect(x + 4, y + 4, width - 8, height / 2);
+    ctx.restore();
+
+    clashFont(ctx, message, x + (width / 2), y + (height / 2), '48', true, '#fff5d6');
 }
 
 const drawPixelLine = (ctx, x, y, width) => {
-    ctx.fillStyle = '#2e2e48';
+    ctx.fillStyle = '#3a3766';
     ctx.fillRect(x, y, width, 4);
     
-    ctx.fillStyle = '#7a6296';
+    ctx.fillStyle = '#9a82d0';
     ctx.fillRect(x, y + 4, width, 4);
 }
 
@@ -154,39 +317,39 @@ const legendLeagueSection = async (legendStats, ctx, x, y) => {
     const paddingLeft = 200
 
     const gradient = createOptimizedGradient(ctx, 'legendleaguesection', x, y, width, height, [
-        { offset: 0, color: '#4d4379' },
-        { offset: 1, color: '#6f659b' }
+        { offset: 0, color: '#4c3f86' },
+        { offset: 1, color: '#6d64ac' }
     ]);
 
-    ctx.fillStyle = gradient
-
+withCardShadow(ctx, () => {
+    ctx.fillStyle = gradient;
     drawRoundedRectPath(ctx, x, y, width, height, radius); 
-    
-    ctx.fill()
+    ctx.fill();
+    });
 
-    const gradient1 = createOptimizedGradient(ctx, 'legendleaguesection1', x, y, width, height, [
-        { offset: 0, color: 'rgba(148, 113, 210, 0)' },
-        { offset: 0.5, color: 'rgba(148, 113, 210, 1)' },
-        { offset: 1, color: 'rgba(148, 113, 210, 0)' }
+    addCardHighlight(ctx, x, y, width, height, radius, 0.4);
+    drawCardOutline(ctx, x, y, width, height, radius, 'rgba(53, 43, 99, 0.85)', 8);
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    const ribbon = createOptimizedGradient(ctx, 'legendleaguesection-ribbon', x, y, width, height, [
+        { offset: 0, color: 'rgba(168, 130, 236, 0)' },
+        { offset: 0.5, color: 'rgba(168, 130, 236, 0.85)' },
+        { offset: 1, color: 'rgba(168, 130, 236, 0)' }
     ]);
-
+ctx.strokeStyle = ribbon;
+    ctx.lineWidth = 85;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.strokeStyle = gradient1;
-    ctx.lineWidth = 90;
-    ctx.moveTo(x, y + 50);
-    ctx.lineTo(x + width, y + 50);
+        ctx.moveTo(x + 140, y + 70);
+    ctx.lineTo(x + width - 140, y + 70);
     ctx.stroke();
-    ctx.closePath();
+    ctx.restore();
 
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = '#493f75';
-    drawRoundedRectPath(ctx, x, y, width, height, radius); 
-    ctx.stroke();
+    clashFont(ctx, 'Legend League Tournament', x + (width / 2), y + 55, '70', true, '#f6f2ff')
 
-    clashFont(ctx, 'Legend League Tournament', x + (width / 2), y + 50, '70', true)
-
-    dividerLine(ctx, x + paddingLeft + 1000, x + paddingLeft + 1000, y + paddingTop + 75, y + paddingTop + 325, "#35304e", "#796fa5")
-    dividerLine(ctx, x + paddingLeft + 2175, x + paddingLeft + 2175, y + paddingTop + 75, y + paddingTop + 325, "#35304e", "#796fa5")
+    dividerLine(ctx, x + paddingLeft + 1000, x + paddingLeft + 1000, y + paddingTop + 75, y + paddingTop + 325, '#342d5b', '#a79cdc')
+    dividerLine(ctx, x + paddingLeft + 2175, x + paddingLeft + 2175, y + paddingTop + 75, y + paddingTop + 325, '#342d5b', '#a79cdc')
 
     await trophyLegendarySection(bestSeason, ctx, x + paddingLeft, y + (paddingTop/2), 'Best'),
     await trophyLegendarySection(previousSeason, ctx, x + paddingLeft + 1100, y + (paddingTop/2), 'Previous'),
@@ -264,9 +427,34 @@ const achievementBanner = async (ctx, x, y, cellHeight, cellWidth, achievementTi
         cellWidth - starsWidth - (achievementIconWidth/2) - 300
     )
 
-    ctx.fillStyle = '#38385c';
+const bannerGradient = createOptimizedGradient(ctx, 'achievement-banner', barX, barY, barWidth, barHeight, [
+        { offset: 0, color: '#565390' },
+        { offset: 1, color: '#3a3867' }
+    ]);
+
+    ctx.save();
+    ctx.fillStyle = bannerGradient;
     drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
     ctx.fill();
+ctx.restore();
+
+    ctx.save();
+    drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
+    ctx.clip();
+    const bannerHighlight = createOptimizedGradient(ctx, 'achievement-banner-highlight', barX, barY, barWidth, barHeight, [
+        { offset: 0, color: 'rgba(255, 255, 255, 0.3)' },
+        { offset: 1, color: 'rgba(255, 255, 255, 0)' }
+    ]);
+    ctx.fillStyle = bannerHighlight;
+    ctx.fillRect(barX + 5, barY + 5, barWidth - 10, barHeight / 2);
+    ctx.restore();
+
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
+    ctx.stroke();
+    ctx.restore();
 
     const iconX = barX + barPadding;
 
@@ -276,8 +464,8 @@ const achievementBanner = async (ctx, x, y, cellHeight, cellWidth, achievementTi
 
     const textX = iconX + spacingBetween;
     const textY = iconCenterY - 30;
-    clashFont(ctx, achievementTitle, iconX, textY - 55, '40', false);
-    clashFont(ctx, text, textX, textY, '60', false);
+    clashFont(ctx, achievementTitle, iconX, textY - 55, '40', false, '#f4f2ff');
+    clashFont(ctx, text, textX, textY, '60', false, '#fff6c9');
 };
 
 // for later
@@ -311,9 +499,34 @@ const personalBestBanner = async (ctx, x, y, emblemWidth, emblemHeight, bestTrop
     const textWidth = ctx.measureText(text).width;
     const barWidth = barPadding + spacingBetween + textWidth + 40;
 
-    ctx.fillStyle = '#38385c';
+const bannerGradient = createOptimizedGradient(ctx, 'personal-best-banner', barX, barY, barWidth, barHeight, [
+        { offset: 0, color: '#565390' },
+        { offset: 1, color: '#3a3867' }
+    ]);
+
+    ctx.save();
+    ctx.fillStyle = bannerGradient;
     drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
     ctx.fill();
+ctx.restore();
+
+    ctx.save();
+    drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
+    ctx.clip();
+    const highlight = createOptimizedGradient(ctx, 'personal-best-highlight', barX, barY, barWidth, barHeight, [
+        { offset: 0, color: 'rgba(255, 255, 255, 0.3)' },
+        { offset: 1, color: 'rgba(255, 255, 255, 0)' }
+    ]);
+    ctx.fillStyle = highlight;
+    ctx.fillRect(barX + 5, barY + 5, barWidth - 10, barHeight / 2);
+    ctx.restore();
+
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
+    ctx.stroke();
+    ctx.restore();
 
     // Trophy icon inside bar
     const iconX = barX + barPadding;
@@ -326,8 +539,8 @@ const personalBestBanner = async (ctx, x, y, emblemWidth, emblemHeight, bestTrop
     // Trophies text
     const textX = iconX + spacingBetween;
     const textY = emblemCenterY - 30;
-    clashFont(ctx, 'Personal best:', iconX, textY - 55, '40', false);
-    clashFont(ctx, bestTrophies, textX, textY, '60', false);
+    clashFont(ctx, 'Personal best:', iconX, textY - 55, '40', false, '#f4f2ff');
+    clashFont(ctx, bestTrophies, textX, textY, '60', false, '#fff6c9');
 };
 
 const statBanner = async (ctx, x, y, emblemWidth, emblemHeight, imageName, stat, statBgColour = '#38385c') => {
@@ -350,16 +563,41 @@ const statBanner = async (ctx, x, y, emblemWidth, emblemHeight, imageName, stat,
 
     const barWidth = barPadding + iconSize + spacingBetween + textWidth + 80;
 
-    ctx.fillStyle = statBgColour;
+const barGradient = createOptimizedGradient(ctx, 'stat-banner', barX, barY, barWidth, barHeight, [
+        { offset: 0, color: '#4c4985' },
+        { offset: 1, color: '#2f2d56' }
+    ]);
+
+    ctx.save();
+    ctx.fillStyle = barGradient;
     drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
     ctx.fill();
+ctx.restore();
+
+    ctx.save();
+    drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
+    ctx.clip();
+    const barHighlight = createOptimizedGradient(ctx, 'stat-banner-highlight', barX, barY, barWidth, barHeight, [
+        { offset: 0, color: 'rgba(255, 255, 255, 0.35)' },
+        { offset: 1, color: 'rgba(255, 255, 255, 0)' }
+    ]);
+    ctx.fillStyle = barHighlight;
+    ctx.fillRect(barX + 6, barY + 6, barWidth - 12, barHeight / 2);
+    ctx.restore();
+
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    drawRightRoundedRectPath(ctx, barX, barY, barWidth, barHeight, barRadius);
+    ctx.stroke();
+    ctx.restore();
 
     const iconX = barX + barPadding;
     ctx.drawImage(statImage, x, y, emblemWidth, emblemHeight);
 
     const textX = iconX + iconSize + spacingBetween;
-    const textY = emblemCenterY - 30
-    clashFont(ctx, stat, textX, textY, '70', false);
+    const textY = emblemCenterY - 30;
+    clashFont(ctx, stat, textX, textY, '70', false, '#fff6c9');
 };
 
 const leagueTrophyBanner = async (ctx, x, y, emblemWidth, emblemHeight, trophies, league, rank) => {
@@ -534,26 +772,28 @@ const achievementsSection = async (achievements, ctx, x, y) =>  {
 }
 
 const achievementCell = async (ctx, x, y, achievementTitle, achievementIcon, achievement) => {
-    const width = 1100
-    const height = 200
-    const radius = 30
-    drawRoundedRectPath(ctx, x, y, width, height, radius)
+    const width = 1100;
+    const height = 200;
+    const radius = 30;
 
     const gradient = createOptimizedGradient(ctx, 'achievementcell', x, y, width, height, [
-        { offset: 0, color: '#a8adb0' },
-        { offset: 1, color: '#9ca5b0' }
+        { offset: 0, color: '#b8bfd2' },
+        { offset: 0.6, color: '#a8afc7' },
+        { offset: 1, color: '#9099b7' }
     ]);
 
+withCardShadow(ctx, () => {
     ctx.fillStyle = gradient;
+drawRoundedRectPath(ctx, x, y, width, height, radius);
     ctx.fill();
+}, { blur: 35, offsetY: 20, color: 'rgba(31, 26, 56, 0.25)' });
 
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
+    addCardHighlight(ctx, x, y, width, height, radius, 0.28);
+    drawCardOutline(ctx, x, y, width, height, radius, 'rgba(255, 255, 255, 0.55)', 4);
 
-    reflection(ctx, x + 25, y + 25, width - 50, (height / 2) - 25)
+    reflection(ctx, x + 25, y + 25, width - 50, (height / 2) - 25);
 
-    await achievementBanner(ctx, x, y, height, width, achievementTitle, achievementIcon, achievement)
+    await achievementBanner(ctx, x, y, height, width, achievementTitle, achievementIcon, achievement);
 }
 
 const reflection = (ctx, x, y, width, height) => {
