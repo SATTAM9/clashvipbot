@@ -1,6 +1,7 @@
 const { parentPort } = require('worker_threads');
 const { getProfileImage } = require('../canvas/profile');
 const { getTroopShowcaseImage } = require('../canvas/troopShowcase');
+const { getHeroShowcaseImage } = require('../canvas/heroShowcase');
 const { preloadAllImages } = require('../canvas/shared');
 
 (async () => {
@@ -45,6 +46,8 @@ parentPort.on('message', async ({ type, profile, key }) => {
             result = await getProfileImage(profile, key);
         } else if (type === 'troop') {
             result = await getTroopShowcaseImage(profile, key);
+        } else if (type === 'hero') {
+            result = await getHeroShowcaseImage(profile, key);
         } else {
             throw new Error(`Unknown render type: ${type}`);
         }

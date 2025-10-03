@@ -5,8 +5,6 @@ registerFont(getFontPath('Clash_Regular'), { family: 'ClashFont' });
 
 
 
-const PLAYER_STATS_SECTION_HEIGHT = 220;
-
 const defaultCardShadow = {
     color: 'rgba(34, 25, 58, 0.35)',
     blur: 65,
@@ -98,10 +96,7 @@ const getProfileImage = async (profile, key) => {
         await legendLeagueSection(profile.legendStatistics, ctx, 25, 1000);
     }
 
-    const statsSectionY = hasLegendStats ? 1425 : 1000;
-    playerStatsSection(profile, ctx, 25, statsSectionY);
-
-    const achievementsY = statsSectionY + PLAYER_STATS_SECTION_HEIGHT + 40;
+    const achievementsY = hasLegendStats ? 1425 : 1000;
     await achievementsSection(profile.achievements, ctx, 75, achievementsY);
 
     autoThrottleCacheClear();
@@ -143,79 +138,6 @@ ctx.fill();
 
     addSeasonalSection(profile, ctx, x, y, width, height, radius)
 }
-
-const playerStatsSection = (profile, ctx, x, y) => {
-    const width = 3450;
-    const height = PLAYER_STATS_SECTION_HEIGHT;
-    const radius = 20;
-    const padding = 120;
-
-    const cardGradient = createOptimizedGradient(ctx, 'player-stats-card', x, y, width, height, [
-        { offset: 0, color: '#6d78ad' },
-        { offset: 1, color: '#4f5b88' },
-    ]);
-
-    withCardShadow(ctx, () => {
-        ctx.fillStyle = cardGradient;
-        drawRoundedRectPath(ctx, x, y, width, height, radius);
-        ctx.fill();
-    });
-
-    addCardHighlight(ctx, x, y, width, height, radius, 0.4);
-    drawCardOutline(ctx, x, y, width, height, radius, 'rgba(255, 255, 255, 0.35)', 6);
-
-    clashFont(ctx, 'Combat & Support', x + padding, y + 80, '70', false);
-    tagFont(ctx, 'Season totals at a glance', x + padding, y + 140, '40', false);
-
-    const stats = [
-        { label: 'Troops donated', value: Number(profile?.donations ?? 0), colors: ['#6fb3ff', '#4f8de0'] },
-        { label: 'Troops received', value: Number(profile?.donationsReceived ?? 0), colors: ['#6ee7d6', '#47c0ac'] },
-        { label: 'Attacks won', value: Number(profile?.attackWins ?? 0), colors: ['#f5a970', '#de7f3f'] },
-        { label: 'Defenses won', value: Number(profile?.defenseWins ?? 0), colors: ['#f27289', '#d44b65'] },
-    ];
-
-    const availableWidth = width - padding * 2;
-    const spacing = 60;
-    const boxWidth = (availableWidth - spacing * (stats.length - 1)) / stats.length;
-    const boxHeight = 120;
-    const boxesTop = y + 210;
-
-    stats.forEach((stat, index) => {
-        const boxX = x + padding + index * (boxWidth + spacing);
-        const gradientKey = `player-stats-box-${index}`;
-        const highlightKey = `player-stats-highlight-${index}`;
-
-        const boxGradient = createOptimizedGradient(ctx, gradientKey, boxX, boxesTop, boxWidth, boxHeight, [
-            { offset: 0, color: stat.colors[0] },
-            { offset: 1, color: stat.colors[1] },
-        ]);
-
-        drawRoundedRectPath(ctx, boxX, boxesTop, boxWidth, boxHeight, 28);
-        ctx.fillStyle = boxGradient;
-        ctx.fill();
-
-        ctx.save();
-        drawRoundedRectPath(ctx, boxX, boxesTop, boxWidth, boxHeight, 28);
-        ctx.clip();
-
-        const highlight = createOptimizedGradient(ctx, highlightKey, boxX, boxesTop, boxWidth, boxHeight, [
-            { offset: 0, color: 'rgba(255, 255, 255, 0.35)' },
-            { offset: 1, color: 'rgba(255, 255, 255, 0)' },
-        ]);
-        ctx.fillStyle = highlight;
-        ctx.fillRect(boxX + 6, boxesTop + 6, boxWidth - 12, boxHeight / 2);
-        ctx.restore();
-
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        drawRoundedRectPath(ctx, boxX, boxesTop, boxWidth, boxHeight, 28);
-        ctx.stroke();
-
-        const displayValue = Math.max(0, Math.round(Number(stat.value ?? 0)));
-        clashFont(ctx, formatNumberWithSpaces(displayValue), boxX + boxWidth / 2, boxesTop + (boxHeight / 2) - 18, '58', true);
-        tagFont(ctx, stat.label, boxX + boxWidth / 2, boxesTop + boxHeight - 28, '36', true);
-    });
-};
 
 const addSeasonalSection = (profile, ctx, x, y, width, height, radius) => {
     const purpleHeight = 125;

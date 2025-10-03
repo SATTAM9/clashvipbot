@@ -3,13 +3,21 @@ const MAX_MEMBERS = 3
 const { prettyNumbers } = require('../format');
 const emojis = require('../../emojis.json');
 const { parseTag } = require('../arguments/tagHandling');
+const { buildPlayerNameChangeEntries, buildPlayerClanHistoryEntries, cleanHistoryName } = require('../historyFormatter');
+
+const buildProfileDescriptionLines = (profile, endTimestamp) => [
+    `**Player tag:** \`${profile.tag}\``,
+    `${emojis.link} **[View profile in-game](https://link.clashofclans.com/en?action=OpenPlayerProfile&tag=${parseTag(profile.tag)})**`,
+    `${emojis.clock} ${ endTimestamp ? `Menu timeout <t:${endTimestamp}:R>` : `Calculating menu timeout...`}`
+];
+
+const VERIFIED_FOOTER = {
+    text: 'Verified under this account',
+    iconURL: 'https://media.discordapp.net/attachments/582092054264545280/935702845183918160/check-mark_2714-fe0f.png'
+};
 
 const getTroopShowcaseEmbed = async (profile, verified, endTimestamp, fileName) => {
-    const descriptionLines = [
-        `**Player tag:** \`${profile.tag}\``,
-        `${emojis.link} **[View profile in-game](https://link.clashofclans.com/en?action=OpenPlayerProfile&tag=${parseTag(profile.tag)})**`,
-        `${emojis.clock} ${ endTimestamp ? `Menu timeout <t:${endTimestamp}:R>` : `Calculating menu timeout...`}`
-    ];
+    const descriptionLines = buildProfileDescriptionLines(profile, endTimestamp);
 
     const embed = new EmbedBuilder()
         .setTitle(`${getLeagueEmote(profile.trophies)} ${profile.name} - Army showcase`)
@@ -18,32 +26,26 @@ const getTroopShowcaseEmbed = async (profile, verified, endTimestamp, fileName) 
         .setDescription(descriptionLines.join('\n'))
         .setImage(`attachment://${fileName}`)
         .setThumbnail('https://i.imgur.com/wbbK27a.png')
-    if (verified) embed.setFooter({text: 'Verified under this account', iconURL: "https://media.discordapp.net/attachments/582092054264545280/935702845183918160/check-mark_2714-fe0f.png"})
+    if (verified) embed.setFooter(VERIFIED_FOOTER)
     return embed
 }
 
 const getProfileEmbed = async (profile, verified, endTimestamp, fileName, thumbnailFileName) => {
     
-    const descriptionLines = [
-        `**Player tag:** \`${profile.tag}\``,
-        `${emojis.link} **[View profile in-game](https://link.clashofclans.com/en?action=OpenPlayerProfile&tag=${parseTag(profile.tag)})**`,
-        `${emojis.clock} ${ endTimestamp ? `Menu timeout <t:${endTimestamp}:R>` : `Calculating menu timeout...`}`
-    ];
+    const descriptionLines = buildProfileDescriptionLines(profile, endTimestamp);
 
     const embed = new EmbedBuilder()
         .setTitle(`${getLeagueEmote(profile.trophies)} ${profile.name} • Profile overview`)
         .setURL(`https://www.clashofstats.com/players/${getURLName(profile)}-${getURLTag(profile)}/summary`)
         .setColor('#33E3FF')
         .setDescription(descriptionLines.join('\n'))
-        .setImage(`attachment://${fileName}`)
-        .setThumbnail(`attachment://${thumbnailFileName}`);
+        .setImage(`attachment://${fileName}`);
 
-    if (verified) {
-        embed.setFooter({
-            text: 'Verified under this account',
-            iconURL: "https://media.discordapp.net/attachments/582092054264545280/935702845183918160/check-mark_2714-fe0f.png"
-        });
+    if (thumbnailFileName) {
+        embed.setThumbnail(`attachment://${thumbnailFileName}`);
     }
+
+    if (verified) embed.setFooter(VERIFIED_FOOTER)
 
     return embed
 }
@@ -182,6 +184,207 @@ const summarizeClanDonations = (clan) => {
     };
 };
 
+const clampFieldValue = (value) => {
+    if (!value) return '-';
+    return value.length > 1024 ? `${value.slice(0, 1019)}...` : value;
+};
+
+const interpretHistoryResult = (historyResult) => {
+    if (!historyResult || typeof historyResult !== 'object') {
+        return { payload: null, error: 'History service unavailable.' };
+    }
+
+    if (!historyResult.ok) {
+        return { payload: null, error: historyResult.error || 'History service unavailable.' };
+    }
+
+    const payload = historyResult.data || null;
+    if (!payload) {
+        return { payload: null, error: 'History service returned no data.' };
+    }
+
+    const successFlag = payload.success === 1 || payload.success === true;
+    const warning = successFlag ? null : (payload.error || 'History data may be incomplete.');
+
+    return { payload, warning };
+};
+
+const buildLimitedList = (entries, limit, formatter) => {
+    if (!Array.isArray(entries) || !entries.length) {
+        return null;
+    }
+
+    const limited = entries.slice(0, limit);
+    const lines = limited.map(formatter).filter(Boolean);
+    if (!lines.length) return null;
+
+    if (entries.length > limit) {
+        lines.push(`• …and ${entries.length - limit} more`);
+    }
+
+    return lines.join('\n');
+};
+
+const formatNameChangeEntry = (entry) => {
+    if (!entry) return '';
+    const timestamp = entry.timestamp || 'Timestamp unavailable';
+    const from = entry.from ? `“${entry.from}”` : '';
+    const to = entry.to ? `“${entry.to}”` : '';
+
+    let summary = 'Name change recorded';
+    if (from && to) summary = `${from} → ${to}`;
+    else if (to) summary = `Now ${to}`;
+    else if (from) summary = `Formerly ${from}`;
+
+    return `• ${timestamp} — ${summary}`;
+};
+
+const formatClanHistoryEntry = (entry) => {
+    if (!entry) return '';
+    const timestamp = entry.timestamp || 'Timestamp unavailable';
+    const action = entry.action || 'Clan activity';
+    const parts = [entry.clanName, entry.clanTag, entry.clanAffiliation].map((value) => value && value.trim()).filter(Boolean);
+    const location = parts.length ? ` (${parts.join(' • ')})` : '';
+    return `• ${timestamp} — ${action}${location}`;
+};
+
+const buildAliasesField = (names) => {
+    if (!Array.isArray(names) || !names.length) return null;
+    const aliases = names
+        .map((name) => cleanHistoryName(name))
+        .filter(Boolean);
+    if (!aliases.length) return null;
+    const unique = Array.from(new Set(aliases));
+    return clampFieldValue(unique.slice(0, 10).join(', '));
+};
+
+const buildCurrentClanField = (currentClan) => {
+    if (!currentClan || typeof currentClan !== 'object') return null;
+    const name = cleanHistoryName(currentClan.name || currentClan.raw || '');
+    const normalizedTag = currentClan.tag ? String(currentClan.tag).toUpperCase() : '';
+    const tag = normalizedTag.startsWith('#') ? normalizedTag : (normalizedTag ? `#${normalizedTag}` : '');
+    const affiliation = cleanHistoryName(currentClan.affiliation || '');
+
+    const parts = [name, tag, affiliation].filter(Boolean);
+    if (!parts.length) return null;
+    return clampFieldValue(parts.join(' • '));
+};
+
+const appendHistoryDataFootnote = (lines) => {
+    if (!Array.isArray(lines)) return '';
+    return [...lines, '_History data provided by clashvip.io_'].join('\n');
+};
+
+const getHistoryEmbed = (profile, verified, endTimestamp, historyResult) => {
+    const embed = new EmbedBuilder()
+        .setTitle(`📜 ${profile.name} • Player history`)
+        .setURL(`https://www.clashofstats.com/players/${getURLName(profile)}-${getURLTag(profile)}/summary`)
+        .setColor('#33E3FF')
+        .setDescription(appendHistoryDataFootnote(buildProfileDescriptionLines(profile, endTimestamp)));
+
+    if (verified) embed.setFooter(VERIFIED_FOOTER);
+
+    const { payload, warning, error } = interpretHistoryResult(historyResult);
+
+    if (!payload) {
+        embed.addFields({
+            name: 'History unavailable',
+            value: clampFieldValue(error || 'History data is currently unavailable.'),
+        });
+        return embed;
+    }
+
+    const nameChanges = buildPlayerNameChangeEntries(payload.nameChanges, payload.trackedActions);
+    const clanHistory = buildPlayerClanHistoryEntries(payload.trackedActions);
+
+    const nameChangeField = buildLimitedList(nameChanges, 5, formatNameChangeEntry) || 'No recorded name changes.';
+    const clanHistoryField = buildLimitedList(clanHistory, 5, formatClanHistoryEntry) || 'No recent clan movements captured.';
+
+    embed.addFields(
+        { name: 'Name changes', value: clampFieldValue(nameChangeField), inline: false },
+        { name: 'Clan history', value: clampFieldValue(clanHistoryField), inline: false }
+    );
+
+    const aliases = buildAliasesField(payload.names);
+    if (aliases) {
+        embed.addFields({ name: 'Known names', value: aliases, inline: false });
+    }
+
+    const currentClan = buildCurrentClanField(payload.currentClan);
+    if (currentClan) {
+        embed.addFields({ name: 'Current clan', value: currentClan, inline: false });
+    }
+
+    if (warning) {
+        embed.addFields({ name: 'Notes', value: clampFieldValue(warning), inline: false });
+    }
+
+    return embed;
+};
+
+const getHeroEmbed = (profile, verified, endTimestamp, fileName) => {
+    const embed = new EmbedBuilder()
+        .setTitle(`⚔️ ${profile.name} • Heroes`)
+        .setURL(`https://www.clashofstats.com/players/${getURLName(profile)}-${getURLTag(profile)}/summary`)
+        .setColor('#33E3FF')
+        .setDescription(buildProfileDescriptionLines(profile, endTimestamp).join('\n'));
+
+    if (fileName) {
+        embed.setImage(`attachment://${fileName}`);
+    }
+
+    if (verified) embed.setFooter(VERIFIED_FOOTER);
+
+    const heroes = Array.isArray(profile.heroes) ? profile.heroes : [];
+
+    if (!heroes.length) {
+        embed.addFields({
+            name: 'No hero data',
+            value: 'Hero information is not available for this profile.',
+            inline: false,
+        });
+        return embed;
+    }
+
+    return embed;
+};
+
+const getClanActivityEmbed = (profile, verified, endTimestamp, historyResult) => {
+    const embed = new EmbedBuilder()
+        .setTitle(`🛡️ ${profile.name} • Clan activity`)
+        .setURL(`https://www.clashofstats.com/players/${getURLName(profile)}-${getURLTag(profile)}/summary`)
+        .setColor('#33E3FF')
+        .setDescription(appendHistoryDataFootnote(buildProfileDescriptionLines(profile, endTimestamp)));
+
+    if (verified) embed.setFooter(VERIFIED_FOOTER);
+
+    const { payload, warning, error } = interpretHistoryResult(historyResult);
+
+    if (!payload) {
+        embed.addFields({
+            name: 'Activity unavailable',
+            value: clampFieldValue(error || 'Clan activity data is currently unavailable.'),
+        });
+        return embed;
+    }
+
+    const clanHistory = buildPlayerClanHistoryEntries(payload.trackedActions);
+    const activityField = buildLimitedList(clanHistory, 10, formatClanHistoryEntry) || 'No recent clan activity recorded.';
+
+    embed.addFields({ name: 'Recent activity', value: clampFieldValue(activityField), inline: false });
+
+    const currentClan = buildCurrentClanField(payload.currentClan);
+    if (currentClan) {
+        embed.addFields({ name: 'Current clan', value: currentClan, inline: false });
+    }
+
+    if (warning) {
+        embed.addFields({ name: 'Notes', value: clampFieldValue(warning), inline: false });
+    }
+
+    return embed;
+};
+
 const getSeasonDayCount = () => {
     const now = new Date();
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
@@ -250,5 +453,8 @@ const fillEmptyString = (str) => str == '' ? '-' : str
 module.exports = {
     getProfileEmbed,
     getClanEmbed,
-    getTroopShowcaseEmbed
+    getTroopShowcaseEmbed,
+    getHeroEmbed,
+    getHistoryEmbed,
+    getClanActivityEmbed
 } 

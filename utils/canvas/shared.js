@@ -352,13 +352,10 @@ const drawRightRoundedRectPath = (ctx, x, y, width, height, radius) => {
 }
 
 const signature = async (ctx, x, y, outline) => {
-  const imagePath = path.join(__dirname, '..', 'assets', 'images', 'CreatorLogo.png');
-
-  const image = await loadImage(imagePath);
-
-  ctx.drawImage(image, x + 50, y + 75, 150, 150);
-
-  sectionTitleFont(ctx, 'Clashvip', x + 250, y + 200, '150', outline)
+  // Draw text-only branding instead of previous logo.
+  const textX = x + 50;
+  const textY = y + 200;
+  sectionTitleFont(ctx, 'Clashvip', textX, textY, '150', outline);
 }
 
 const getImagePath = (imageName) => {

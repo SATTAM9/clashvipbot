@@ -4,13 +4,14 @@ const { isOwnerOfAccount } = require('../../../dao/mongo/verification/queries');
 const { parseTag, isTagValid } = require('../../../utils/arguments/tagHandling');
 const { findProfile } = require('../../../dao/clash/verification');
 const { getInvalidTagEmbed } = require('../../../utils/embeds/verify');
-const { getProfileEmbed, getTroopShowcaseEmbed } = require('../../../utils/embeds/stats')
+const { getProfileEmbed, getTroopShowcaseEmbed, getHistoryEmbed, getClanActivityEmbed, getHeroEmbed } = require('../../../utils/embeds/stats')
 const { InteractionContextType, ApplicationIntegrationType, ComponentType, AttachmentBuilder, MessageFlags } = require('discord.js');
 const { profileOptions } = require('../../../utils/selections/profileOptions');
 const { expiredOptions } = require('../../../utils/selections/expiredOptions');
 const { getLoadingEmbed } = require('../../../utils/embeds/loading');
 const { getNotYourInteractionProfileEmbed } = require('../../../utils/embeds/safety/notYourInteractionProfile');
 const renderManager = require('../../../utils/render/SafeRenderManager');
+const { fetchPlayerHistory } = require('../../../utils/clashsiteApi');
 
 module.exports = {
   mainServerOnly: false,
@@ -82,15 +83,22 @@ module.exports = {
 
         const verified = await isOwnerOfAccount(tag, interaction.user.id)
         const playerData = playerResponse.response.data
-        
+
+        const historyPromise = fetchPlayerHistory(playerData.tag).catch((error) => {
+            console.error('player history fetch failed:', error);
+            return { ok: false, error: 'History service unavailable.' };
+        });
+
         const timeoutMs = 300_000
         const endTimestamp = Math.floor((Date.now() + timeoutMs) / 1000);
 
         const keyProfile = playerData.tag.replace(/[^a-zA-Z0-9-_]/g, '');
         const keyTroop = keyProfile + '_troop';
+        const keyHero = keyProfile + '_hero';
 
         const profileImage = await renderManager.render('profile', playerData, keyProfile);
         const troopImage = await renderManager.render('troop', playerData, keyTroop);
+        const heroImage = await renderManager.render('hero', playerData, keyHero);
 
         const profileAttachment = new AttachmentBuilder(Buffer.from(profileImage.buffer), { name: profileImage.fileName });
 
@@ -106,10 +114,22 @@ module.exports = {
 
         const timestampedProfileEmbed = await getProfileEmbed(playerData, verified, endTimestamp, profileImage.fileName)
         const timestampedTroopShowcaseEmbed = await getTroopShowcaseEmbed(playerData, verified, endTimestamp, troopImage.fileName)
+        const heroEmbed = getHeroEmbed(playerData, verified, endTimestamp, heroImage?.fileName)
+
+        const playerHistoryResult = await historyPromise
+        if (!playerHistoryResult.ok) {
+            console.warn(`History fetch issue for ${playerData.tag}:`, playerHistoryResult.error)
+        }
+
+        const historyEmbed = getHistoryEmbed(playerData, verified, endTimestamp, playerHistoryResult)
+        const clanActivityEmbed = getClanActivityEmbed(playerData, verified, endTimestamp, playerHistoryResult)
 
         const dataOptions = {
             'profile': timestampedProfileEmbed,
-            'army': timestampedTroopShowcaseEmbed
+            'army': timestampedTroopShowcaseEmbed,
+            'hero': heroEmbed,
+            'history': historyEmbed,
+            'clan-activity': clanActivityEmbed
         }
 
         await interaction.editReply({
@@ -148,13 +168,18 @@ module.exports = {
                 components: [profileOptions(selected, true)]
             });
             
-            const attachment = selected === 'profile' 
-                ? new AttachmentBuilder(Buffer.from(profileImage.buffer), { name: profileImage.fileName })
-                : new AttachmentBuilder(Buffer.from(troopImage.buffer), { name: troopImage.fileName });
+            let files = []
+            if (selected === 'profile') {
+                files = [new AttachmentBuilder(Buffer.from(profileImage.buffer), { name: profileImage.fileName })]
+            } else if (selected === 'army') {
+                files = [new AttachmentBuilder(Buffer.from(troopImage.buffer), { name: troopImage.fileName })]
+            } else if (selected === 'hero' && heroImage) {
+                files = [new AttachmentBuilder(Buffer.from(heroImage.buffer), { name: heroImage.fileName })]
+            }
 
             await selectInteraction.editReply({
                 embeds: [selectedData],
-                files: [attachment],
+                files,
                 components: [profileOptions(selected)]
             });
         });
