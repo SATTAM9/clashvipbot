@@ -1,8 +1,9 @@
-const mongoose = require("mongoose")
-const Schema = mongoose.Schema
+const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
 
 const guildConfigurationSchema = Schema({
     guildID: { type: String, required: true },
+    donationClans: { type: [String], required: false, default: [] },
     leaderboardChannels: {
         legendary: { type: String, required: false },
         builder: { type: String, required: false }
@@ -13,7 +14,7 @@ const guildConfigurationSchema = Schema({
         starLord: { type: String, required: false },
         farmersRUs: { type: String, required: false },
         masterBuilder: { type: String, required: false },
-        philanthropist:{ type: String, required: false },
+        philanthropist: { type: String, required: false },
         greenThumb: { type: String, required: false },
         masterGamer: { type: String, required: false },
         conqueror: { type: String, required: false },
@@ -31,7 +32,7 @@ const guildConfigurationSchema = Schema({
         starLord: { type: String, required: false },
         farmersRUs: { type: String, required: false },
         masterBuilder: { type: String, required: false },
-        philanthropist:{ type: String, required: false },
+        philanthropist: { type: String, required: false },
         greenThumb: { type: String, required: false },
         masterGamer: { type: String, required: false },
         conqueror: { type: String, required: false },
@@ -55,6 +56,6 @@ const guildConfigurationSchema = Schema({
         townhall16: { type: String, required: false },
         townhall17: { type: String, required: false }
     }
-})
+});
 
-module.exports = mongoose.model("GuildConfiguration", guildConfigurationSchema)
+module.exports = mongoose.model("GuildConfiguration", guildConfigurationSchema);
